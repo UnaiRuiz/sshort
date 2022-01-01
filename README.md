@@ -14,7 +14,7 @@
 
 ### Install the script
 1. Install Dependencies
-2. Git clone `TODO`
+2. git clone https://github.com/UnaiRuiz/sshort.git
 3. Add exec permission to the script 
 ```
 chmod +x sshort
