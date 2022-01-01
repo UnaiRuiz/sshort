@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+# Script: sshort
+# Author: Unai Ruiz
+
+# ======= Config Parameters ======
+decryptedfile=/path/to/decryptedfile
+encryptedfile=/path/to/encryptedfile
+command=ssh
+# ================================
+
+#Colours
+blueColour="\e[0;34m\033[1m"
+grayColour="\e[0;37m\033[1m"
+redColour="\e[0;31m\033[1m"
+yellowColour="\e[0;33m\033[1m"
+endColour="\033[0m\e[0m"
+
+export NEWT_COLORS='
+root=,cyan
+checkbox=,cyan
+entry=,cyan
+label=cyan,
+actlistbox=,cyan
+helpline=,cyan
+title=black,
+roottext=,cyan
+emptyscale=cyan
+disabledentry=cyan,
+'
+#Functions
+function helpPanel(){
+	echo -e "\n${grayColour}[!] Use: sshort${endColour}"
+	for i in $(seq 1 100); do echo -ne "${grayColour}-"; done; echo -ne "${endColour}"
+    echo -e "\n\t${grayColour}[-p]${endColour}${blueColour} Define MasterPassword${endColour}"
+	echo -e "\t${grayColour}[-f]${endColour}${blueColour} Especify Encryptedfile${endColour}"
+	echo -e "\t${grayColour}[-c]${endColour}${blueColour} Directly connect without UI${endColour}"
+    echo -e "\t${grayColour}[-l]${endColour}${blueColour} Especify localpath. Required if scp is used.${endColour}"
+    echo -e "\t${grayColour}[-r]${endColour}${blueColour} Especify remotepath. Required if scp is used.${endColour}"
+    echo -e "\t${grayColour}[-s]${endColour}${blueColour} Secure Copy Protocol. Especify the direction (incoming|outgoing). Also define -l and -r.${endColour}"
+    echo -e "\t${grayColour}[-h]${endColour}${blueColour} Show this help panel${endColour}"
+}
+
+function sshConnect(){
+    read id session category host port auth_method username password ssh_key <<< $(echo "$decrypted_data" | grep $connect)
+
+    if [ $command == "scp" ]; then
+        if [ $direction == "outgoing" ]; then
+            source=$localpath
+            destination=$username@$host:$remotepath
+        else
+            source=$username@$host:$remotepath
+            destination=$localpath
+        fi
+        command_arguments="-P $port -r -o StrictHostKeyChecking=no $source $destination"
+    else
+        command_arguments="-o StrictHostKeyChecking=no $username@$host -p $port"
+    fi
+
+    
+    echo 'Connecting to '$session'...'
+    if [ $auth_method == "password" ]; then
+        sshpass -p $password $command $command_arguments
+    elif [ $auth_method == "key" ]; then
+        $command -i $ssh_key $command_arguments
+    else
+        echo 'Auth method: "'$auth_method'" not supported.'
+    fi
+    exit 0
+}
+
+function encrypt(){
+    gpg --batch --quiet --yes --passphrase $masterpassword -c $decryptedfile
+    rm $decryptedfile 
+}
+
+function decrypt(){
+    echo 'Decrypting '$encryptedfile'...'
+    gpg --batch --quiet --yes --passphrase $masterpassword -d $encryptedfile -o $decryptedfile
+}
+
+function decrypt_nofile(){
+    echo 'Decrypting '$encryptedfile'...'
+    decrypted_data=$(gpg --batch --quiet --yes --passphrase $masterpassword -d $encryptedfile 2>/dev/null)
+    if [ -z "$decrypted_data" ]; then
+        echo "The file could not be decrypted."
+        exit 1
+    fi
+}
+
+function ask_password(){
+    masterpassword=$(whiptail --passwordbox "Enter your secret password" 8 78 --title "Master Password" 3>&1 1>&2 2>&3)
+    exitstatus=$?
+    if [ $exitstatus != 0 ]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+}
+
+function category_menu(){
+    values=()
+    for value in "${categories[@]}"
+    do
+        values+=($value)
+        values+=("")
+    done
+    category=$(whiptail --title "Category Menu" --fb --menu "Choose a category" 15 60 4 "${values[@]}" 3>&1 1>&2 2>&3)
+    exitstatus=$?
+    if [ $exitstatus != 0 ]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+}
+
+function session_menu(){
+    values=("<-- Back" "")
+    for value in "${sessions[@]}"
+    do
+        values+=($value)
+        values+=("")
+    done
+    connect=$(whiptail --title "Session Menu" --fb --menu "Choose a session" 15 60 4 "${values[@]}" 3>&1 1>&2 2>&3)
+    exitstatus=$?
+    if [ $exitstatus != 0 ]; then
+        echo "Operation cancelled."
+        exit 0
+    fi
+}
+
+while getopts "c:f:l:p:r:s:h" arg; do
+    case $arg in
+        c) connect=$OPTARG;;
+        f) encryptedfile=$OPTARG;;
+        l) localpath=$OPTARG;;
+        p) masterpassword=$OPTARG;;
+        r) remotepath=$OPTARG;;
+        s) command=scp 
+           if [ -z "$localpath" ] || [ -z "$remotepath" ]; then
+               echo 'To use scp especify localpath (-l) and remotepath (-r)'
+               exit 1
+           fi
+           if [ $OPTARG != "incoming" ] && [ $OPTARG != "outgoing" ]; then
+               echo 'Especify the direction. (incoming|outgoing)'
+               exit 1
+            else
+                direction=$OPTARG;
+           fi
+           ;;
+        h) helpPanel; exit 0;;
+    esac
+done
+
+if [ -z "$masterpassword" ]; then
+    ask_password
+fi
+decrypt_nofile
+if [ ! -z "$connect" ]; then
+    sshConnect
+else
+    read -a categories <<< $(echo $(echo "$decrypted_data" | awk 'NR!=1 {print $3}' | uniq) )
+    while true; do
+        category_menu
+        read -a sessions <<< $(echo $(echo "$decrypted_data" | grep $category | awk '{print $2}') )
+        session_menu
+        if [ "$connect" != "<-- Back" ]; then break; fi;
+    done
+    sshConnect
+fi
+exit
