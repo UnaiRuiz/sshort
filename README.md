@@ -98,5 +98,5 @@ encryptedfile=</path/to/encryptedfile>
 ## Important Notes:
 - The name of a session must not contain the name of a category to which it does not belong.
 - The name of a session must not contain the name of another.
-- Preferably the name of a category should not contain the name of another.
+- Preferably, the name of a category should not contain the name of another.
 - First line of the hosts file is ignored. Use it as a header.

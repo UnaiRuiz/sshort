@@ -28,7 +28,25 @@ roottext=,cyan
 emptyscale=cyan
 disabledentry=cyan,
 '
+
 #Functions
+function check_dependencies(){
+    dependencies_array=(sshpass whiptail gpg)
+    echo; for program in "${dependencies_array[@]}"; do
+        if [ ! "$(command -v $program)" ] && [ ! "$(command --version $program)" ]; then
+            echo -e "${grayColour} $program${endColour}${yellowColour} is not installed${endColour}"; sleep 1
+            if [ "$(echo $UID)" == "0" ]; then
+                echo -e "\n${grayColour} Installing...${endColour}"; sleep 1
+                apt install $program -y > /dev/null 2>&1
+                echo -e "\n${grayColour} $program${endColour}${yellowColour} installed${endColour}\n"; sleep 2
+            else
+                echo -e "\n${redColour}You need to run the program as root to install dependencies.${endColour}\n"
+                exit 1
+            fi
+        fi
+    done
+}
+
 function helpPanel(){
 	echo -e "\n${grayColour}[!] Use: sshort${endColour}"
 	for i in $(seq 1 100); do echo -ne "${grayColour}-"; done; echo -ne "${endColour}"
@@ -127,6 +145,7 @@ function session_menu(){
     fi
 }
 
+check_dependencies
 while getopts "c:f:l:p:r:s:h" arg; do
     case $arg in
         c) connect=$OPTARG;;
